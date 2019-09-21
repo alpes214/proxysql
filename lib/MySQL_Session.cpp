@@ -1445,10 +1445,7 @@ int MySQL_Session::handler_again___status_PINGING_SERVER() {
 	} else {
 		if (rc==-1 || rc==-2) {
 			if (rc==-2) {
-				unsigned long long us = mysql_thread___ping_timeout_server*1000;
-				us += thread->curtime;
-				us -= myds->wait_until;
-				proxy_error("Ping timeout during ping on %s:%d after %lluus (timeout %dms)\n", myconn->parent->address, myconn->parent->port, us, mysql_thread___ping_timeout_server);
+				proxy_error("Ping timeout during ping on %s , %d\n", myconn->parent->address, myconn->parent->port);
 			} else { // rc==-1
 				int myerr=mysql_errno(myconn->mysql);
 				proxy_error("Detected a broken connection during ping on (%d,%s,%d) , FD (Conn:%d , MyDS:%d) : %d, %s\n", myconn->parent->myhgc->hid, myconn->parent->address, myconn->parent->port, myds->fd, myds->myconn->fd, myerr, mysql_error(myconn->mysql));
@@ -1481,6 +1478,7 @@ int MySQL_Session::handler_again___status_RESETTING_CONNECTION() {
 	// we recreate local_stmts : see issue #752
 	delete myconn->local_stmts;
 	myconn->local_stmts=new MySQL_STMTs_local_v14(false); // false by default, it is a backend
+	history += ":RC1481";
 	int rc=myconn->async_change_user(myds->revents);
 	if (rc==0) {
 		__sync_fetch_and_add(&MyHGM->status.backend_change_user, 1);
@@ -2784,6 +2782,8 @@ bool MySQL_Session::handler_again___status_CHANGING_USER_SERVER(int *_rc) {
 	// we recreate local_stmts : see issue #752
 	delete myconn->local_stmts;
 	myconn->local_stmts=new MySQL_STMTs_local_v14(false); // false by default, it is a backend
+	history += ":CUS2785";
+	history += this->mybe->server_myds->myconn->parent->address;
 	if (mysql_thread___connect_timeout_server_max) {
 		if (mybe->server_myds->max_connect_time==0) {
 			mybe->server_myds->max_connect_time=thread->curtime+mysql_thread___connect_timeout_server_max*1000;

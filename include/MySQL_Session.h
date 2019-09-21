@@ -155,6 +155,9 @@ class MySQL_Session
 	void * operator new(size_t);
 	void operator delete(void *);
 
+	std::string history;
+
+
 	Query_Info CurrentQuery;
 	PtrSize_t mirrorPkt;
 

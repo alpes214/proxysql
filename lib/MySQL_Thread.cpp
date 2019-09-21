@@ -4251,6 +4251,8 @@ void MySQL_Thread::process_all_sessions() {
 				}
 			} else {
 				if (sess->killed==true) {
+					proxy_warning("TRACE to_process = 0 && killed == true\n");
+					proxy_warning("TRACE session history %s\n", sess->history.c_str());
 					// this is a special cause, if killed the session needs to be executed no matter if paused
 					sess->handler();
 					char _buf[1024];
