@@ -2088,7 +2088,6 @@ void MySQL_Connection::reset() {
 	}
 	delete local_stmts;
 	local_stmts=new MySQL_STMTs_local_v14(false);
-	myds->sess->history += ":r2092";
 	creation_time = monotonic_time();
 	options.isolation_level_int = 0;
 	if (options.isolation_level) {

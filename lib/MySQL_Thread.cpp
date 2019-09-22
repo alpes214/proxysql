@@ -3381,6 +3381,7 @@ void MySQL_Thread::register_session(MySQL_Session *_sess, bool up_start) {
 		mysql_sessions = new PtrArray();
 	}
 	mysql_sessions->add(_sess);
+	_sess->appendHistory(__FILE__, __LINE__,"REGISTER SESSION");
 	_sess->thread=this;
 	_sess->match_regexes=match_regexes;
 	if (up_start)
@@ -3848,6 +3849,7 @@ __run_skip_1a:
 					MySQL_Session *mysess=(MySQL_Session *)mysql_sessions->index(sess_pos);
 					if (mysess->idle_since < min_idle) {
 						mysess->killed=true;
+						mysess->appendHistory(__FILE__, __LINE__, "GET SESSION BY INDEX. SESSION EXPIRED.");
 						MySQL_Data_Stream *tmp_myds=mysess->client_myds;
 						int dsidx=tmp_myds->poll_fds_idx;
 						//fprintf(stderr,"Removing session %p, DS %p idx %d\n",mysess,tmp_myds,dsidx);
@@ -3865,6 +3867,9 @@ __run_skip_1a:
 						unregister_session(sess_pos);
 						resume_mysql_sessions->add(mysess);
 						epoll_ctl(efd, EPOLL_CTL_DEL, tmp_myds->fd, NULL);
+					}
+					else {
+						mysess->appendHistory(__FILE__, __LINE__, "GET SESSION BY INDEX");
 					}
 					mysess_idx++;
 				}
@@ -4197,10 +4202,16 @@ void MySQL_Thread::process_all_sessions() {
 					numTrx = sess->active_transactions;
 					if (numTrx) {
 						// the session has idle transactions, kill it
-						if (sess_time/1000 > (unsigned long long)mysql_thread___max_transaction_time) sess->killed=true;
+						if (sess_time/1000 > (unsigned long long)mysql_thread___max_transaction_time) {
+							sess->killed=true;
+							sess->appendHistory(__FILE__, __LINE__, "IDLE TRANSACTION");
+						}
 					} else {
 						// the session is idle, kill it
-						if (sess_time/1000 > (unsigned long long)mysql_thread___wait_timeout) sess->killed=true;
+						if (sess_time/1000 > (unsigned long long)mysql_thread___wait_timeout) {
+							sess->killed=true;
+							sess->appendHistory(__FILE__, __LINE__, "IDLE SESSION");
+						}
 					}
 				}
 				if (servers_table_version_current != servers_table_version_previous) { // bug fix for #1085
@@ -4222,6 +4233,7 @@ void MySQL_Thread::process_all_sessions() {
 				if ( (sess_time/1000 > (unsigned long long)mysql_thread___wait_timeout) ) {
 					sess->killed=true;
 					sess->to_process=1;
+					sess->appendHistory(__FILE__, __LINE__, "WAIT TIMEOUT");
 				}
 			}
 #endif // IDLE_THREADS
@@ -4251,8 +4263,9 @@ void MySQL_Thread::process_all_sessions() {
 				}
 			} else {
 				if (sess->killed==true) {
+					sess->appendHistory(__FILE__, __LINE__, "SPECIAL CASE");
 					proxy_warning("TRACE to_process = 0 && killed == true\n");
-					proxy_warning("TRACE session history %s\n", sess->history.c_str());
+					proxy_warning("TRACE session history\n %s\n", sess->history.c_str());
 					// this is a special cause, if killed the session needs to be executed no matter if paused
 					sess->handler();
 					char _buf[1024];
@@ -4542,6 +4555,7 @@ void MySQL_Thread::register_session_connection_handler(MySQL_Session *_sess, boo
 	_sess->thread=this;
 	_sess->connections_handler=true;
 	assert(_new);
+	_sess->appendHistory(__FILE__, __LINE__, "REG CON HANDLER");
 	mysql_sessions->add(_sess);
 }
 
@@ -5509,6 +5523,7 @@ bool MySQL_Threads_Handler::kill_session(uint32_t _thread_session_id) {
 			if (sess->thread_session_id==_thread_session_id) {
 				sess->killed=true;
 				ret=true;
+				sess->appendHistory(__FILE__, __LINE__, "SESSION THREAD ID");
 				goto __exit_kill_session;
 			}
 		}
@@ -5522,6 +5537,7 @@ bool MySQL_Threads_Handler::kill_session(uint32_t _thread_session_id) {
 			MySQL_Session *sess=(MySQL_Session *)thr->mysql_sessions->pdata[j];
 			if (sess->thread_session_id==_thread_session_id) {
 				sess->killed=true;
+				sess->appendHistory(__FILE__, __LINE__, "IDLE SESSION THREAD ID");
 				ret=true;
 				goto __exit_kill_session;
 			}
@@ -6298,6 +6314,7 @@ void MySQL_Thread::Scan_Sessions_to_Kill(PtrArray *mysess) {
 						if (_sess->client_myds) {
 						       if (strcmp(t->username,_sess->client_myds->myconn->userinfo->username)==0) {
 								_sess->killed=true;
+								_sess->appendHistory(__FILE__, __LINE__, "SAME USER NAME");
 							}
 						}
 						cont=false;

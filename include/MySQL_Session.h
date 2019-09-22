@@ -156,7 +156,8 @@ class MySQL_Session
 	void operator delete(void *);
 
 	std::string history;
-
+	int session_id;
+	void appendHistory(const char* file, int line, const char* message);
 
 	Query_Info CurrentQuery;
 	PtrSize_t mirrorPkt;

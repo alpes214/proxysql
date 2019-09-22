@@ -22,6 +22,7 @@
 
 #define EXPMARIA
 
+static int session_counter = 0;
 
 static inline char is_digit(char c) {
 	if(c >= '0' && c <= '9')
@@ -400,6 +401,41 @@ void MySQL_Session::operator delete(void *ptr) {
 }
 
 
+void MySQL_Session::appendHistory(const char* file, int line, const char* message) {
+	std::stringstream ss;
+
+	const void * address = static_cast<const void*>(this);
+	ss << "File: " <<file << ", line: " << line << ", killed=" << killed << ", to_process=" << to_process
+	<< ", healthy=" << healthy << ", session_id=" << session_id << ", session address=" << address
+	<< ", " << message << "\n";
+
+	history += ss.str();
+}
+
+void
+print_trace (std::string& bt)
+{
+	void *array[10];
+	size_t size;
+	char **strings;
+	size_t i;
+	char buf[100000];
+
+	size = backtrace (array, 10);
+	strings = backtrace_symbols (array, size);
+
+	snprintf(buf, sizeof(buf), "Obtained %zd stack frames.\n", size);
+	bt += buf;
+
+	for (i = 0; i < size; i++) {
+		snprintf(buf, sizeof(buf),"%s\n", strings[i]);
+		bt += buf;
+	}
+
+	free (strings);
+}
+
+
 MySQL_Session::MySQL_Session() {
 	thread_session_id=0;
 	handler_ret = 0;
@@ -431,6 +467,9 @@ MySQL_Session::MySQL_Session() {
 	to_process=0;
 	mybe=NULL;
 	mirror=false;
+	session_id = session_counter;
+	session_counter++;
+	appendHistory(__FILE__, __LINE__, "SESSION CTR");
 	mirrorPkt.ptr=NULL;
 	mirrorPkt.size=0;
 	set_status(NONE);
@@ -1478,7 +1517,6 @@ int MySQL_Session::handler_again___status_RESETTING_CONNECTION() {
 	// we recreate local_stmts : see issue #752
 	delete myconn->local_stmts;
 	myconn->local_stmts=new MySQL_STMTs_local_v14(false); // false by default, it is a backend
-	history += ":RC1481";
 	int rc=myconn->async_change_user(myds->revents);
 	if (rc==0) {
 		__sync_fetch_and_add(&MyHGM->status.backend_change_user, 1);
@@ -2782,8 +2820,6 @@ bool MySQL_Session::handler_again___status_CHANGING_USER_SERVER(int *_rc) {
 	// we recreate local_stmts : see issue #752
 	delete myconn->local_stmts;
 	myconn->local_stmts=new MySQL_STMTs_local_v14(false); // false by default, it is a backend
-	history += ":CUS2785";
-	history += this->mybe->server_myds->myconn->parent->address;
 	if (mysql_thread___connect_timeout_server_max) {
 		if (mybe->server_myds->max_connect_time==0) {
 			mybe->server_myds->max_connect_time=thread->curtime+mysql_thread___connect_timeout_server_max*1000;
