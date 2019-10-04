@@ -3076,12 +3076,17 @@ __get_pkts_from_client:
 		}
 		switch (status) {
 
+			proxy_warning("TRACE : STATUS %d\n", status);
+
 			case CONNECTING_CLIENT:
+			proxy_warning("TRACE : CONNETING_CLIENT\n");
 				switch (client_myds->DSS) {
 					case STATE_SERVER_HANDSHAKE:
+						proxy_warning("TRACE : CONNETING_CLIENT:HANDSHAKE\n");
 						handler___status_CONNECTING_CLIENT___STATE_SERVER_HANDSHAKE(&pkt, &wrong_pass);
 						break;
 					case STATE_SSL_INIT:
+						proxy_warning("TRACE : CONNECTING_CLIENT:INIT\n");
 						handler___status_CONNECTING_CLIENT___STATE_SERVER_HANDSHAKE(&pkt, &wrong_pass);
 						//handler___status_CONNECTING_CLIENT___STATE_SSL_INIT(&pkt);
 						break;
@@ -3094,6 +3099,7 @@ __get_pkts_from_client:
 				break;
 
 			case WAITING_CLIENT_DATA:
+				proxy_warning("TRACE : WAITING_CLIENT_DATA\n");
 				// this is handled only for real traffic, not mirror
 				if (pkt.size==(0xFFFFFF+sizeof(mysql_hdr))) {
 					// we are handling a multi-packet
@@ -3159,6 +3165,7 @@ __get_pkts_from_client:
 							NEXT_IMMEDIATE(CONNECTING_SERVER);  // we create a connection . next status will be FAST_FORWARD
 						}
 						c=*((unsigned char *)pkt.ptr+sizeof(mysql_hdr));
+						proxy_warning("TRACE: mysql command %d\n", c);
 						if (session_type == PROXYSQL_SESSION_CLICKHOUSE) {
 							if ((enum_mysql_command)c == _MYSQL_COM_INIT_DB) {
 								PtrSize_t _new_pkt;
@@ -3603,6 +3610,14 @@ __get_pkts_from_client:
 							case _MYSQL_COM_PROCESS_KILL:
 								handler___status_WAITING_CLIENT_DATA___STATE_SLEEP___MYSQL_COM_PROCESS_KILL(&pkt);
 								break;
+							case COM_REGISTER_SLAVE:
+								proxy_warning("TRACE : COM_REGISTER_SLAVE\n");
+								handler___status_WAITING_CLIENT_DATA___STATE_SLEEP___MYSQL_COM_REGISTER_SERVER(&pkt);
+								break;
+							case COM_BINLOG_DUMP:
+								proxy_warning("TRACE : COM_BINLOG_DUMP\n");
+								handler___status_WAITING_CLIENT_DATA___STATE_SLEEP___MYSQL_COM_BINLOG_DUMP(&pkt);
+								break;
 							default:
 								proxy_error("RECEIVED AN UNKNOWN COMMAND: %d -- PLEASE REPORT A BUG\n", c);
 								l_free(pkt.size,pkt.ptr);
@@ -3642,9 +3657,11 @@ __get_pkts_from_client:
 				
 				break;
 			case FAST_FORWARD:
+				proxy_warning("TRACE : FAST_FORWARD\n");
 				mybe->server_myds->PSarrayOUT->add(pkt.ptr, pkt.size);
 				break;
 			case NONE:
+				proxy_warning("TRACE : NONE\n");
 			default:
 				{
 					char buf[INET6_ADDRSTRLEN];
@@ -4044,6 +4061,11 @@ handler_again:
 								errmsg = strdup(mysql_stmt_error(CurrentQuery.mysql_stmt));
 							}
 						}
+						if (myconn->query.stmt) {
+							if (mysql_stmt_close(myconn->query.stmt))
+								proxy_error("Error closing stmt");
+							myconn->query.stmt = NULL;
+						}
 						CurrentQuery.mysql_stmt=NULL; // immediately reset mysql_stmt
 						// the query failed
 						if (
@@ -4152,6 +4174,7 @@ handler_again:
 							} else {
 								proxy_warning("Error during query on (%d,%s,%d): %d, %s\n", myconn->parent->myhgc->hid, myconn->parent->address, myconn->parent->port, myerr, ( errmsg ? errmsg : mysql_error(myconn->mysql)));
 							}
+							proxy_warning("TRACE : error %d\n", myerr);
 							MyHGM->add_mysql_errors(myconn->parent->myhgc->hid, myconn->parent->address, myconn->parent->port, client_myds->myconn->userinfo->username, (client_myds->addr.addr ? client_myds->addr.addr : (char *)"unknown" ), client_myds->myconn->userinfo->schemaname, myerr, (char *)( errmsg ? errmsg : mysql_error(myconn->mysql)));
 							bool retry_conn=false;
 							switch (myerr) {
@@ -5079,6 +5102,30 @@ void MySQL_Session::handler___status_WAITING_CLIENT_DATA___STATE_SLEEP___MYSQL_C
 	}
 	client_myds->DSS=STATE_SLEEP;
 	l_free(pkt->size,pkt->ptr);
+}
+
+void MySQL_Session::handler___status_WAITING_CLIENT_DATA___STATE_SLEEP___MYSQL_COM_REGISTER_SERVER(PtrSize_t *pkt) {
+	gtid_hid=-1;
+	proxy_warning("TRACE : Got COM_REGISTER_SERVER packet\n");
+	l_free(pkt->size,pkt->ptr);
+	client_myds->setDSS_STATE_QUERY_SENT_NET();
+	unsigned int nTrx=NumActiveTransactions();
+	uint16_t setStatus = (nTrx ? SERVER_STATUS_IN_TRANS : 0 );
+	if (autocommit) setStatus |= SERVER_STATUS_AUTOCOMMIT;
+	client_myds->myprot.generate_pkt_OK(true,NULL,NULL,1,0,0,setStatus,0,NULL);
+	client_myds->DSS=STATE_SLEEP;
+}
+
+void MySQL_Session::handler___status_WAITING_CLIENT_DATA___STATE_SLEEP___MYSQL_COM_BINLOG_DUMP(PtrSize_t *pkt) {
+	gtid_hid=-1;
+	proxy_warning("TRACE : Got COM_REGISTER_SERVER packet\n");
+	l_free(pkt->size,pkt->ptr);
+	client_myds->setDSS_STATE_QUERY_SENT_NET();
+	unsigned int nTrx=NumActiveTransactions();
+	uint16_t setStatus = (nTrx ? SERVER_STATUS_IN_TRANS : 0 );
+	if (autocommit) setStatus |= SERVER_STATUS_AUTOCOMMIT;
+	client_myds->myprot.generate_pkt_EOF(true,NULL,NULL,1,0,0,NULL);
+	client_myds->DSS=STATE_SLEEP;
 }
 
 void MySQL_Session::handler___status_WAITING_CLIENT_DATA___STATE_SLEEP___MYSQL_COM_PING(PtrSize_t *pkt) {

@@ -1567,6 +1567,7 @@ Query_Processor_Output * Query_Processor::process_mysql_query(MySQL_Session *ses
 		query=(char *)l_alloc(len+1);
 	}
 	memcpy(query,(char *)ptr+sizeof(mysql_hdr)+1,len);
+	proxy_warning("TRACE : Query %s\n", query);
 	query[len]=0;
 	if (__sync_add_and_fetch(&version,0) > _thr_SQP_version) {
 		// update local rules;

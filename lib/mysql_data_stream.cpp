@@ -29,6 +29,29 @@ struct bio_st {
 
 extern MySQL_Threads_Handler *GloMTH;
 
+static void __dump_pkt(const char *func, unsigned char *_ptr, unsigned int len) {
+
+	unsigned int i;
+	fprintf(stderr,"DUMP %d bytes FROM %s\n", len, func);
+	for(i = 0; i < len; i++) {
+		if(isprint(_ptr[i])) fprintf(stderr,"%c", _ptr[i]); else fprintf(stderr,".");
+		if (i>0 && (i%16==15 || i==len-1)) {
+			unsigned int j;
+			if (i%16!=15) {
+				j=15-i%16;
+				while (j--) fprintf(stderr," ");
+			}
+			fprintf(stderr," --- ");
+			for (j=(i==len-1 ? ((int)(i/16))*16 : i-15 ) ; j<=i; j++) {
+				fprintf(stderr,"%02x ", _ptr[j]);
+			}
+			fprintf(stderr,"\n");
+		}
+   }
+	fprintf(stderr,"\n\n");
+	
+
+}
 #ifdef DEBUG
 static void __dump_pkt(const char *func, unsigned char *_ptr, unsigned int len) {
 
@@ -1131,6 +1154,7 @@ int MySQL_Data_Stream::array2buffer() {
 #ifdef DEBUG
 				{ __dump_pkt(__func__,(unsigned char *)queueOUT.pkt.ptr,queueOUT.pkt.size); }
 #endif
+				{ __dump_pkt(__func__,(unsigned char *)queueOUT.pkt.ptr,queueOUT.pkt.size); }
 			} else {
 				cont=false;
 				continue;
